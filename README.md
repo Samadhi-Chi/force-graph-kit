@@ -21,10 +21,13 @@ let frame = simulation.snapshots()
 Tests cover d3-force-3d's deterministic initial coordinates, default LCG sequence,
 alpha cooling, velocity integration, fixed-axis behavior, insertion-ordered forces, and
 degree-biased links. See [D3_COMPATIBILITY.md](D3_COMPATIBILITY.md) for precise limits.
-Many-body and collision are correctness-first O(n²) implementations, so large graphs
-require future spatial indexing.
+Many-body defaults to a deterministic Barnes-Hut orthant tree and retains an explicit O(n²)
+direct reference mode. Constant-radius collision remains O(n²); cached per-node-radius
+collision uses the spatial index as a broad phase. Benchmark your actual graph and force mix.
 
-Linux validates the algorithm only. No RealityKit, visionOS, Xcode, compositor, gesture, or device validation has occurred. A future Apple-only adapter should consume snapshots and own entities, edge meshes, labels, selection, and hit testing.
+Linux validates ForceGraphCore, ForceGraphScene, the demo, and benchmark. RealityKit entity
+synchronization source is now isolated in an Apple-only conditional target, but no RealityKit,
+visionOS, Xcode, compositor, gesture, simulator, or device validation has occurred.
 
 ## Dragging
 
@@ -36,12 +39,11 @@ Non-finite initial positions are initialized deterministically and non-finite ve
 
 ## Milestone roadmap
 
-1. **Core parity:** extend scalar force APIs with tested per-node accessors and a broader
-   upstream reference corpus.
-2. **Spatial performance:** add tested quadtree/octree acceleration and benchmarks while
-   retaining a direct calculation reference path.
-3. **RealityKit adapter:** implement an Apple-only entity, edge, label, hit-test, and drag
-   integration target.
+1. **Core parity:** broaden upstream reference fixtures and refine accessor cache lifecycle.
+2. **Spatial performance:** optimize and benchmark tree construction, nearest search, and
+   constant-radius collision while retaining direct reference paths.
+3. **RealityKit adapter:** validate and harden the conditional entity synchronizer and add
+   host-app gesture coordinate conversion.
 4. **visionOS acceptance:** validate Xcode builds, simulator behavior, frame pacing,
    gestures, and final interaction quality on real hardware.
 
@@ -51,3 +53,19 @@ Non-finite initial positions are initialized deterministically and non-finite ve
 swift build -c release
 swift test -c release
 ```
+
+## Products
+
+- **ForceGraphCore** — deterministic layout, direct/Barnes-Hut charge, cached providers,
+  spatial queries, graph deltas, async frames, bounds, and volume fitting.
+- **ForceGraphScene** — stable visual identity, labels, visibility, selection/highlighting,
+  filtering, interaction intents, synchronized edge endpoints, and drag lifecycle.
+- **ForceGraphRealityKit** — conditionally compiled Apple entity synchronization source;
+  unverified on Linux and not yet accepted for Apple release.
+- **force-graph-demo / force-graph-benchmark** — Linux-compatible JSON smoke output and
+  timing diagnostics.
+
+See [Getting Started](GETTING_STARTED.md), [Performance](PERFORMANCE.md),
+[feature coverage](FEATURE_MATRIX.md), [RealityKit integration](REALITYKIT_INTEGRATION.md), and
+[visionOS acceptance gates](VISIONOS_ACCEPTANCE.md). A Chinese overview is available in
+[README.zh-CN.md](README.zh-CN.md).

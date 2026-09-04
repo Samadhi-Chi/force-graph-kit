@@ -5,3 +5,5 @@
 - Keep deterministic behavior and stable-ID endpoint resolution covered by tests.
 - Do not claim Apple SDK, RealityKit, device, or D3 numerical validation unless it was run.
 - Run release build and tests before proposing changes.
+- Keep ForceGraphScene UI-neutral and all Apple code behind platform/import guards.
+- Benchmark spatial changes without adding timing assertions to unit tests.
