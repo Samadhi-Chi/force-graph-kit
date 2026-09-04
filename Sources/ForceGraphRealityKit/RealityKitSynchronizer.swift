@@ -13,6 +13,7 @@
   #endif
 
   /// Main-actor RealityKit entity synchronizer. Apple SDK compilation remains a maintainer gate.
+  @available(macOS 15.0, iOS 18.0, visionOS 2.0, *)
   @MainActor
   public final class RealityKitGraphSynchronizer<
     ID: Hashable & Sendable, LinkID: Hashable & Sendable
@@ -98,11 +99,13 @@
 
     private func updateEdge(_ edge: ModelEntity, link: RenderLink<ID, LinkID>) {
       let source = SIMD3<Float>(
-        Float(link.sourcePosition.x), Float(link.sourcePosition.y), Float(link.sourcePosition.z))
+        finiteFloat(link.sourcePosition.x), finiteFloat(link.sourcePosition.y),
+        finiteFloat(link.sourcePosition.z))
       let target = SIMD3<Float>(
-        Float(link.targetPosition.x), Float(link.targetPosition.y), Float(link.targetPosition.z))
+        finiteFloat(link.targetPosition.x), finiteFloat(link.targetPosition.y),
+        finiteFloat(link.targetPosition.z))
       let length = simd_distance(source, target)
-      guard length > 0 else {
+      guard length.isFinite, length > 1e-7 else {
         edge.isEnabled = false
         return
       }
@@ -111,7 +114,7 @@
         mesh: .generateCylinder(height: length, radius: Float(max(0.0005, link.visual.width))),
         materials: [material(link.visual.color)])
       edge.position = (source + target) / 2
-      edge.look(at: target, from: edge.position, relativeTo: root, forward: .positiveY)
+      edge.orientation = orientationAligningYAxis(to: (target - source) / length)
     }
 
     private func recycleNode(_ id: ID) {
@@ -134,6 +137,20 @@
           red: CGFloat(color.red), green: CGFloat(color.green), blue: CGFloat(color.blue),
           alpha: CGFloat(color.alpha)),
         roughness: 0.65, isMetallic: false)
+    }
+
+    private func finiteFloat(_ value: Double) -> Float {
+      value.isFinite ? Float(value) : 0
+    }
+
+    private func orientationAligningYAxis(to direction: SIMD3<Float>) -> simd_quatf {
+      let localYAxis = SIMD3<Float>(0, 1, 0)
+      let cosine = max(-1, min(1, simd_dot(localYAxis, direction)))
+      if cosine > 1 - 1e-6 { return simd_quatf(angle: 0, axis: localYAxis) }
+      if cosine < -1 + 1e-6 {
+        return simd_quatf(angle: .pi, axis: SIMD3<Float>(1, 0, 0))
+      }
+      return simd_quatf(from: localYAxis, to: direction)
     }
   }
 #endif

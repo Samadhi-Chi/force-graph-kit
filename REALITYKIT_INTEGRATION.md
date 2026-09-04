@@ -2,6 +2,9 @@
 
 `ForceGraphRealityKit` is conditionally compiled when RealityKit and either UIKit or AppKit can be
 imported. Platform color/font aliases keep the synchronization surface shared across Apple targets.
+`RealityKitGraphSynchronizer` has one explicit availability boundary—macOS 15, iOS 18, and
+visionOS 2—because its input-target and generated-cylinder APIs require that SDK generation. The
+lower package platform declarations continue to support ForceGraphCore and ForceGraphScene.
 Its synchronizer maintains stable-ID node roots and link entities, pools removals, parents generated
 labels to node roots, installs collision/input components, and updates every edge from both endpoint
 positions in the same `ForceGraphRenderFrame` used for nodes.

@@ -37,10 +37,13 @@ import Testing
   for (dimensions, maximumChildren) in [
     (SimulationDimensions.one, 2), (.two, 4), (.three, 8),
   ] {
-    let points = (0..<64).map {
-      SpatialPoint(id: $0, x: Double($0 % 4), y: Double(($0 / 4) % 4), z: Double($0 / 16))
+    let points: [SpatialPoint<Int>] = (0..<64).map { index in
+      let x = Double(index % 4)
+      let y = Double((index / 4) % 4)
+      let z = Double(index / 16)
+      return SpatialPoint<Int>(id: index, x: x, y: y, z: z)
     }
-    let index = SpatialIndex(points: points, dimensions: dimensions, leafCapacity: 1)
+    let index = SpatialIndex<Int>(points: points, dimensions: dimensions, leafCapacity: 1)
     #expect(index.cells.allSatisfy { $0.children.count <= maximumChildren })
     #expect(index.points.count == 64)
     for cell in index.cells where cell.children.isEmpty {
@@ -51,16 +54,21 @@ import Testing
         if dimensions.rawValue > 2 { #expect(abs(point.z - cell.center.2) <= cell.half + 1e-12) }
       }
     }
-    let repeated = SpatialIndex(points: points, dimensions: dimensions, leafCapacity: 1)
+    let repeated = SpatialIndex<Int>(points: points, dimensions: dimensions, leafCapacity: 1)
     #expect(index.cells.map { $0.children } == repeated.cells.map { $0.children })
     #expect(index.cells.map { $0.indices } == repeated.cells.map { $0.indices })
   }
   #expect(SpatialIndex<Int>(points: [], dimensions: .three).cells.isEmpty)
-  let singleton = SpatialIndex(points: [SpatialPoint(id: 1, x: 0)], dimensions: .one)
+  let singletonPoints: [SpatialPoint<Int>] = [SpatialPoint<Int>(id: 1, x: 0)]
+  let singleton = SpatialIndex<Int>(points: singletonPoints, dimensions: .one)
   #expect(singleton.cells.count == 1 && singleton.nearest(x: 0)?.id == 1)
 
-  let aggregateIndex = SpatialIndex(
-    points: [SpatialPoint(id: 0, x: 0, y: 2), SpatialPoint(id: 1, x: 4, y: 6)],
+  let aggregatePoints: [SpatialPoint<Int>] = [
+    SpatialPoint<Int>(id: 0, x: 0, y: 2),
+    SpatialPoint<Int>(id: 1, x: 4, y: 6),
+  ]
+  let aggregateIndex = SpatialIndex<Int>(
+    points: aggregatePoints,
     dimensions: .two, leafCapacity: 1)
   let root = barnesHutAggregates(tree: aggregateIndex)[0]
   #expect(root.count == 2 && root.x == 2 && root.y == 4 && root.z == 0)

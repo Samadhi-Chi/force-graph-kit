@@ -13,6 +13,6 @@
 | Camera controls | Not applicable | Fit/focus intents only; renderer owns camera |
 | Curved links, particles, sprites | Deferred | Straight edges and directional metadata now |
 | D3 JS events/accessor source compatibility | Not applicable | Native Swift API, semantic compatibility only |
-| RealityKit entity synchronization | Source implemented/unverified | Conditional Apple-only target |
+| RealityKit entity synchronization | Source implemented/unverified | Conditional target; API requires macOS 15, iOS 18, or visionOS 2 |
 | SwiftUI RealityView application | Example source/unverified | Host application owns lifecycle and UI |
 | visionOS simulator/device acceptance | Deferred | Explicit maintainer gates |
