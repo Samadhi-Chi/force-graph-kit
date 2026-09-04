@@ -1,0 +1,16 @@
+{
+  "nodes": [
+    {"id":"swift","title":"Swift","value":8},
+    {"id":"concurrency","title":"Concurrency","value":5},
+    {"id":"visionos","title":"visionOS","value":6},
+    {"id":"realitykit","title":"RealityKit","value":7},
+    {"id":"spatial-ui","title":"Spatial UI","value":4}
+  ],
+  "links": [
+    {"source":"swift","target":"concurrency"},
+    {"source":"swift","target":"visionos"},
+    {"source":"visionos","target":"realitykit"},
+    {"source":"visionos","target":"spatial-ui"},
+    {"source":"realitykit","target":"spatial-ui"}
+  ]
+}
