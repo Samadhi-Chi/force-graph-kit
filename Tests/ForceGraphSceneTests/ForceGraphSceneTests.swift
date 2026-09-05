@@ -1,6 +1,7 @@
 import ForceGraphCore
-import ForceGraphScene
 import Testing
+
+@testable import ForceGraphScene
 
 private func sampleScene() -> ForceGraphScene<String, String> {
   ForceGraphScene(
@@ -178,6 +179,83 @@ private func sampleScene() -> ForceGraphScene<String, String> {
     bounds: bounds, dimensions: .three, axes: .xz,
     volume: GraphPosition3D(x: 2, y: 1, z: 2), padding: 0)
   #expect(fit.scale == 0.1)
+  let inactiveInvalid = LayoutBounds(
+    minimumX: -1, minimumY: -1, minimumZ: .infinity,
+    maximumX: 1, maximumY: 1, maximumZ: -.infinity)
+  #expect(
+    GraphCoordinateSpace.fitting(
+      bounds: inactiveInvalid, dimensions: .two,
+      volume: GraphPosition3D(x: 2, y: 2, z: 2), padding: 0
+    ).scale == 1)
+}
+
+@Test func coordinateAndVisualMutationRemainFiniteAtUseBoundaries() async {
+  var space = GraphCoordinateSpace(
+    scale: 2, translation: GraphPosition3D(x: 1, y: 2, z: 3))
+  space.scale = .nan
+  space.translation.x = .infinity
+  let rendered = space.rendererPosition(forGraph: GraphPosition3D(x: 1e300, y: .nan, z: 4))
+  #expect(rendered.x.isFinite && rendered.y.isFinite && rendered.z.isFinite)
+  let graph = space.graphPosition(forRenderer: rendered)
+  #expect(graph.x.isFinite && graph.y.isFinite && graph.z.isFinite)
+
+  var scene = sampleScene()
+  scene.nodes[0].visual.radius = .nan
+  scene.nodes[0].visual.value = .infinity
+  scene.links[0].visual.width = -.infinity
+  let frame = await ForceGraphController(scene: scene).frame()
+  #expect(frame.nodes[0].visual.radius == 0 && frame.nodes[0].visual.value == 0)
+  #expect(frame.links[0].visual.width == 0)
+
+  let normal = GraphCoordinateSpace(
+    axes: .xz, scale: 3, translation: GraphPosition3D(x: 2, y: 4, z: 6))
+  let point = GraphPosition3D(x: 5, y: 7, z: 11)
+  #expect(normal.graphPosition(forRenderer: normal.rendererPosition(forGraph: point)) == point)
+}
+
+@Test func sameRevisionMembershipAndMechanicsUpdateAutomatically() async {
+  var scene = sampleScene()
+  scene.policy.sceneUpdate = .automatic(alpha: 0.7)
+  let controller = ForceGraphController(scene: scene)
+  for _ in 0..<400 { _ = await controller.tick() }
+  let initialRevision = (await controller.frame()).topologyRevision
+
+  scene.nodes[1].visual.color = GraphColor(red: 1, green: 0, blue: 0)
+  await controller.updateScene(scene)
+  #expect(!(await controller.frame()).isLayoutRunning)
+  #expect((await controller.frame()).topologyRevision == initialRevision)
+
+  scene.nodes[1].visual.isVisible = false
+  await controller.updateScene(scene)
+  let hidden = await controller.frame()
+  #expect(hidden.nodes.map(\.snapshot.id) == ["a", "c"] && hidden.links.isEmpty)
+  #expect(hidden.topologyRevision != initialRevision && !hidden.isLayoutRunning)
+
+  scene.nodes[1].visual.isVisible = true
+  await controller.updateScene(scene)
+  let shown = await controller.frame()
+  #expect(shown.nodes.count == 3 && shown.links.count == 2)
+  #expect(shown.topologyRevision != hidden.topologyRevision && !shown.isLayoutRunning)
+
+  scene.links[0].physics.distance = 99
+  await controller.updateScene(scene)
+  #expect((await controller.frame()).isLayoutRunning)
+
+  await controller.stop()
+  scene.nodes.append(
+    SceneNode(physics: ForceNode(id: "d", x: 60, y: 0), visual: NodeVisual(label: "D")))
+  scene.links.append(SceneLink(id: "cd", physics: ForceLink(source: "c", target: "d")))
+  await controller.updateScene(scene)
+  let added = await controller.frame()
+  #expect(added.nodes.map(\.snapshot.id) == ["a", "b", "c", "d"])
+  #expect(added.links.map(\.id) == ["ab", "bc", "cd"] && added.isLayoutRunning)
+
+  var filtered = scene.filtered { $0.physics.id != "b" }
+  filtered.policy = scene.policy
+  await controller.updateScene(filtered)
+  let removed = await controller.frame()
+  #expect(removed.nodes.map(\.snapshot.id) == ["a", "c", "d"])
+  #expect(removed.links.map(\.id) == ["cd"])
 }
 
 @Test func labelsUseIndependentStablePoliciesAndRevisions() async {
@@ -218,6 +296,26 @@ private func yieldUntil(
     await Task.yield()
   }
   return false
+}
+
+private actor ReentrancyGate {
+  private var entered = false
+  private var didSuspend = false
+  private var continuation: CheckedContinuation<Void, Never>?
+
+  func suspendOnce() async {
+    guard !didSuspend else { return }
+    didSuspend = true
+    entered = true
+    await withCheckedContinuation { continuation = $0 }
+  }
+
+  func hasEntered() -> Bool { entered }
+
+  func release() {
+    continuation?.resume()
+    continuation = nil
+  }
 }
 
 @Test func schedulerKeepsSameStreamDormantAndRestarts() async {
@@ -287,4 +385,105 @@ private func yieldUntil(
   consumer.cancel()
   _ = await consumer.result
   #expect(await yieldUntil { await scheduler.state() == .stopped })
+}
+
+@Test func delayedRestartCannotReviveStoppedScheduler() async {
+  let controller = ForceGraphController(scene: sampleScene())
+  let scheduler = ForceGraphSceneScheduler(controller: controller)
+  let stream = await scheduler.start()
+  await scheduler.stop()
+  await scheduler.restart(alpha: 0.5)
+  await scheduler.resume()
+  #expect(await scheduler.state() == .stopped)
+  var iterator = stream.makeAsyncIterator()
+  #expect(await iterator.next() == nil)
+}
+
+@Test func staleEmitCannotOverwritePauseRestartStateAcrossAwait() async {
+  let controller = ForceGraphController(scene: sampleScene())
+  await controller.stop()
+  let scheduler = ForceGraphSceneScheduler(controller: controller, framesPerSecond: 240)
+  let gate = ReentrancyGate()
+  await scheduler.setReentrancyProbe { if $0 == .emit { await gate.suspendOnce() } }
+  let stream = await scheduler.start()
+  var iterator = stream.makeAsyncIterator()
+  guard await yieldUntil({ await gate.hasEntered() }) else {
+    await gate.release()
+    Issue.record("scheduler did not reach the controlled suspension")
+    return
+  }
+
+  await scheduler.pause()
+  await scheduler.setReentrancyProbe(nil)
+  await scheduler.restart(alpha: 0.5)
+  #expect(await iterator.next() != nil)
+  await gate.release()
+  for _ in 0..<20 { await Task.yield() }
+  #expect(await scheduler.state() == .running)
+  await scheduler.stop()
+}
+
+@Test func staleEmitCannotOverwriteReplacementConsumerAcrossAwait() async {
+  let controller = ForceGraphController(scene: sampleScene())
+  await controller.stop()
+  let scheduler = ForceGraphSceneScheduler(controller: controller, framesPerSecond: 240)
+  let gate = ReentrancyGate()
+  await scheduler.setReentrancyProbe { if $0 == .emit { await gate.suspendOnce() } }
+  let oldStream = await scheduler.start()
+  var oldIterator = oldStream.makeAsyncIterator()
+  guard await yieldUntil({ await gate.hasEntered() }) else {
+    await gate.release()
+    Issue.record("scheduler did not reach the controlled suspension")
+    return
+  }
+
+  await controller.restart(alpha: 0.5)
+  await scheduler.setReentrancyProbe(nil)
+  let replacement = await scheduler.start()
+  var replacementIterator = replacement.makeAsyncIterator()
+  #expect(await oldIterator.next() == nil)
+  #expect(await replacementIterator.next() != nil)
+  await gate.release()
+  for _ in 0..<20 { await Task.yield() }
+  #expect(await scheduler.state() == .running)
+  await scheduler.stop()
+}
+
+@Test func staleRestartAndUpdateCannotReviveReplacedSubscription() async {
+  let controller = ForceGraphController(scene: sampleScene())
+  let scheduler = ForceGraphSceneScheduler(controller: controller, framesPerSecond: 240)
+  let firstGate = ReentrancyGate()
+  await scheduler.setReentrancyProbe { if $0 == .restart { await firstGate.suspendOnce() } }
+  let initialStream = await scheduler.start()
+  let restart = Task { await scheduler.restart(alpha: 0.5) }
+  guard await yieldUntil({ await firstGate.hasEntered() }) else {
+    await firstGate.release()
+    Issue.record("restart did not reach the controlled suspension")
+    return
+  }
+  await scheduler.setReentrancyProbe(nil)
+  let replacement = await scheduler.start()
+  await firstGate.release()
+  await restart.value
+  #expect(await scheduler.state() == .running)
+
+  let secondGate = ReentrancyGate()
+  await scheduler.setReentrancyProbe { if $0 == .updateScene { await secondGate.suspendOnce() } }
+  var updated = sampleScene()
+  updated.topologyRevision = 99
+  let update = Task { await scheduler.updateScene(updated, policy: .reheat(0.5)) }
+  guard await yieldUntil({ await secondGate.hasEntered() }) else {
+    await secondGate.release()
+    Issue.record("scene update did not reach the controlled suspension")
+    return
+  }
+  await scheduler.setReentrancyProbe(nil)
+  let secondReplacement = await scheduler.start()
+  await secondGate.release()
+  _ = await update.value
+  #expect(await scheduler.state() == .running)
+  _ = initialStream
+  _ = replacement
+  _ = secondReplacement
+  await scheduler.stop()
 }

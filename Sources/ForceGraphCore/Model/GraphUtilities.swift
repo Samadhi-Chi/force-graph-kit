@@ -248,12 +248,18 @@ public func layoutBounds<ID>(of nodes: [ForceNode<ID>], dimensions: SimulationDi
     maximumX: maxX, maximumY: maxY, maximumZ: maxZ)
 }
 
-/// Computes a centered, uniform fit transform. Invalid/nonpositive volume dimensions return identity.
+/// Computes a centered, uniform fit transform. Padding must be in `[0, 0.5)`.
+/// Invalid volume dimensions, padding, or finite ordered bounds return identity.
 public func fitTransform(
   bounds: LayoutBounds, width: Double, height: Double, depth: Double, padding: Double = 0.1
 ) -> FitTransform {
   guard width.isFinite, height.isFinite, depth.isFinite, width > 0, height > 0, depth > 0,
-    padding.isFinite, padding >= 0, padding < 1
+    padding.isFinite, padding >= 0, padding < 0.5,
+    bounds.minimumX.isFinite, bounds.minimumY.isFinite, bounds.minimumZ.isFinite,
+    bounds.maximumX.isFinite, bounds.maximumY.isFinite, bounds.maximumZ.isFinite,
+    bounds.minimumX <= bounds.maximumX, bounds.minimumY <= bounds.maximumY,
+    bounds.minimumZ <= bounds.maximumZ,
+    bounds.width.isFinite, bounds.height.isFinite, bounds.depth.isFinite
   else {
     return FitTransform(scale: 1, translateX: 0, translateY: 0, translateZ: 0)
   }
@@ -261,9 +267,9 @@ public func fitTransform(
   let candidates = [(bounds.width, width), (bounds.height, height), (bounds.depth, depth)]
     .compactMap { $0.0 > 0 ? $0.1 * available / $0.0 : nil }
   let scale = candidates.min() ?? 1
-  let cx = (bounds.minimumX + bounds.maximumX) / 2
-  let cy = (bounds.minimumY + bounds.maximumY) / 2
-  let cz = (bounds.minimumZ + bounds.maximumZ) / 2
+  let cx = bounds.minimumX / 2 + bounds.maximumX / 2
+  let cy = bounds.minimumY / 2 + bounds.maximumY / 2
+  let cz = bounds.minimumZ / 2 + bounds.maximumZ / 2
   return FitTransform(
     scale: scale, translateX: -cx * scale,
     translateY: -cy * scale, translateZ: -cz * scale)

@@ -1,23 +1,14 @@
 #if os(visionOS)
   import ForceGraphCore
-  import ForceGraphRealityKit
   import ForceGraphScene
-  import RealityKit
   import SwiftUI
 
   @main
   @available(visionOS 2.0, *)
+  @MainActor
   struct ForceGraphVisionSample: App {
-    var body: some Scene {
-      WindowGroup { GraphVolume() }.windowStyle(.volumetric)
-    }
-  }
-
-  @available(visionOS 2.0, *)
-  struct GraphVolume: View {
     private let controller: ForceGraphController<String, String>
     private let scheduler: ForceGraphSceneScheduler<String, String>
-    @State private var renderer = RealityKitGraphSynchronizer<String, String>()
 
     init() {
       let scene = ForceGraphScene(
@@ -35,12 +26,10 @@
       self.scheduler = ForceGraphSceneScheduler(controller: controller)
     }
 
-    var body: some View {
-      RealityView { content in content.add(renderer.root) }
-        .task {
-          for await frame in await scheduler.start() { renderer.synchronize(frame: frame) }
-        }
-        .onDisappear { Task { await scheduler.stop() } }
+    var body: some Scene {
+      WindowGroup {
+        ForceGraphVolumeExample(controller: controller, scheduler: scheduler)
+      }.windowStyle(.volumetric)
     }
   }
 #endif

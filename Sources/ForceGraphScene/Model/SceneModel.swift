@@ -52,6 +52,12 @@ public struct NodeVisual: Sendable, Equatable {
   }
 }
 
+extension NodeVisual {
+  var sanitized: Self {
+    Self(label: label, color: color, radius: radius, value: value, isVisible: isVisible)
+  }
+}
+
 /// Renderer-neutral policy deciding which node labels are emitted independently of node geometry.
 public enum LabelVisibilityPolicy: Sendable, Equatable {
   /// Hides every label.
@@ -95,6 +101,12 @@ public struct LinkVisual: Sendable, Equatable {
     self.width = width.isFinite ? max(0, width) : 0
     self.isVisible = isVisible
     self.isDirectional = isDirectional
+  }
+}
+
+extension LinkVisual {
+  var sanitized: Self {
+    Self(color: color, width: width, isVisible: isVisible, isDirectional: isDirectional)
   }
 }
 
@@ -221,7 +233,8 @@ public struct ForceGraphScene<ID: Hashable & Sendable, LinkID: Hashable & Sendab
   public var dimensions: SimulationDimensions
   /// Warmup and drag cooling policy.
   public var policy: LayoutPolicy
-  /// Caller-controlled topology revision used by incremental render adapters.
+  /// Caller-controlled topology hint. Controllers also advance their emitted render revision when
+  /// node/link membership changes, so correctness does not depend on maintaining this value.
   public var topologyRevision: UInt64
   /// Caller-controlled visual revision used to invalidate renderer geometry and materials.
   public var visualRevision: UInt64

@@ -275,6 +275,56 @@ import Testing
   #expect(point.x == 40 && point.y == 20)
 }
 
+@Test func fitRejectsUnsafePaddingAndBounds() {
+  let bounds = LayoutBounds(
+    minimumX: -10, minimumY: -5, minimumZ: 0,
+    maximumX: 10, maximumY: 5, maximumZ: 0)
+  #expect(
+    fitTransform(bounds: bounds, width: 100, height: 100, depth: 100, padding: 0.49).scale > 0)
+  for padding in [0.5, 0.75, .nan] {
+    #expect(
+      fitTransform(bounds: bounds, width: 100, height: 100, depth: 100, padding: padding).scale == 1
+    )
+  }
+  let inverted = LayoutBounds(
+    minimumX: 2, minimumY: 0, minimumZ: 0,
+    maximumX: 1, maximumY: 0, maximumZ: 0)
+  #expect(fitTransform(bounds: inverted, width: 10, height: 10, depth: 10).scale == 1)
+  let nonfinite = LayoutBounds(
+    minimumX: -.infinity, minimumY: 0, minimumZ: 0,
+    maximumX: .infinity, maximumY: 0, maximumZ: 0)
+  #expect(fitTransform(bounds: nonfinite, width: 10, height: 10, depth: 10).scale == 1)
+  let point = LayoutBounds(
+    minimumX: 3, minimumY: 4, minimumZ: 5,
+    maximumX: 3, maximumY: 4, maximumZ: 5)
+  let degenerate = fitTransform(bounds: point, width: 10, height: 10, depth: 10)
+  #expect(degenerate.scale == 1 && degenerate.translateX == -3)
+}
+
+@Test func barnesHutRetainsOriginalOffsetsAfterFilteringInvalidPoints() {
+  let valid = (0..<48).map {
+    ForceNode(id: $0 % 7, x: Double($0) * 1.25, y: Double(($0 * 13) % 17), z: .nan)
+  }
+  func run(_ includeInvalidPrefix: Bool) -> [ForceNode<Int>] {
+    var input = valid
+    if includeInvalidPrefix { input.insert(ForceNode(id: -1, x: 0, y: 0, z: .nan), at: 0) }
+    var simulation = ForceSimulation(nodes: input, dimensions: .two)
+    if includeInvalidPrefix { simulation.updateNode(id: -1) { $0.x = .nan } }
+    simulation.alphaDecay = 0
+    simulation.velocityDecay = 0
+    simulation.force(
+      "charge", .manyBody(strength: -3, algorithm: .barnesHut(theta: 0.7, directThreshold: 0)))
+    simulation.tick()
+    return includeInvalidPrefix ? Array(simulation.nodes.dropFirst()) : simulation.nodes
+  }
+  let filteredPrefix = run(true)
+  let reference = run(false)
+  #expect(
+    zip(filteredPrefix, reference).allSatisfy {
+      $0.vx == $1.vx && $0.vy == $1.vy && $0.vz == $1.vz
+    })
+}
+
 @Test func runnerStreamsAndCancels() async {
   let simulation = ForceSimulation(nodes: [ForceNode(id: 0)], dimensions: .one)
   let runner = SimulationRunner(simulation: simulation, framesPerSecond: 240)
@@ -287,7 +337,7 @@ import Testing
   #expect(await iterator.next() == nil)
 }
 
-@Test func runnerRepeatedLifecycleHasOnlyOneActiveGeneration() async {
+@Test(.timeLimit(.minutes(1))) func runnerRepeatedLifecycleHasOnlyOneActiveGeneration() async {
   let runner = SimulationRunner(
     simulation: ForceSimulation(nodes: [ForceNode(id: 0)], dimensions: .one),
     framesPerSecond: .nan, ticksPerFrame: -4
@@ -304,8 +354,13 @@ import Testing
   #expect(await runner.currentFrame().sequence == paused)
   await runner.configure(framesPerSecond: 500, ticksPerFrame: 5_000)
   await runner.resume()
-  try? await Task.sleep(for: .milliseconds(10))
-  #expect(await runner.currentFrame().sequence > paused)
+  var resumed: SimulationFrame<Int>?
+  while let frame = await secondIterator.next() {
+    guard frame.sequence > paused else { continue }
+    resumed = frame
+    break
+  }
+  #expect(resumed?.sequence ?? 0 > paused)
   await runner.stop()
   await runner.stop()
   if await secondIterator.next() != nil { #expect(await secondIterator.next() == nil) }

@@ -9,6 +9,7 @@ let package = Package(
     .executableTarget(
       name: "ForceGraphVisionSample",
       dependencies: [
+        .product(name: "ForceGraphCore", package: "force-graph-kit"),
         .product(name: "ForceGraphScene", package: "force-graph-kit"),
         .product(name: "ForceGraphRealityKit", package: "force-graph-kit"),
       ])

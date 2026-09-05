@@ -49,6 +49,9 @@ public struct GraphCoordinateSpace: Sendable, Equatable {
 
   /// Converts graph coordinates to renderer coordinates.
   public func rendererPosition(forGraph position: GraphPosition3D) -> GraphPosition3D {
+    let position = Self.sanitized(position)
+    let scale = validScale
+    let translation = Self.sanitized(translation)
     let mapped: GraphPosition3D
     switch axes {
     case .xyz, .xy: mapped = position
@@ -63,6 +66,9 @@ public struct GraphCoordinateSpace: Sendable, Equatable {
 
   /// Converts a renderer coordinate back into graph coordinates for dragging and picking.
   public func graphPosition(forRenderer position: GraphPosition3D) -> GraphPosition3D {
+    let position = Self.sanitized(position)
+    let scale = validScale
+    let translation = Self.sanitized(translation)
     let mapped = GraphPosition3D(
       x: (position.x - translation.x) / scale,
       y: (position.y - translation.y) / scale,
@@ -74,11 +80,24 @@ public struct GraphCoordinateSpace: Sendable, Equatable {
     }
   }
 
+  private var validScale: Double { scale.isFinite && scale > 0 ? scale : 1 }
+
+  private static func sanitized(_ position: GraphPosition3D) -> GraphPosition3D {
+    GraphPosition3D(x: position.x, y: position.y, z: position.z)
+  }
+
   /// Fits graph bounds uniformly inside a renderer volume by reusing Core's fit algorithm.
   public static func fitting(
     bounds: LayoutBounds, dimensions: SimulationDimensions, axes: GraphAxisMapping = .xyz,
     volume: GraphPosition3D, padding: Double = 0.05
   ) -> Self {
+    let activeBounds = LayoutBounds(
+      minimumX: bounds.minimumX,
+      minimumY: dimensions == .one ? 0 : bounds.minimumY,
+      minimumZ: dimensions == .three ? bounds.minimumZ : 0,
+      maximumX: bounds.maximumX,
+      maximumY: dimensions == .one ? 0 : bounds.maximumY,
+      maximumZ: dimensions == .three ? bounds.maximumZ : 0)
     let graphVolume: GraphPosition3D
     switch axes {
     case .xyz, .xy: graphVolume = volume
@@ -86,7 +105,7 @@ public struct GraphCoordinateSpace: Sendable, Equatable {
     case .yz: graphVolume = GraphPosition3D(x: volume.y, y: volume.z, z: volume.x)
     }
     let fit = fitTransform(
-      bounds: bounds, width: graphVolume.x, height: graphVolume.y,
+      bounds: activeBounds, width: graphVolume.x, height: graphVolume.y,
       depth: graphVolume.z, padding: padding)
     let origin = GraphCoordinateSpace(axes: axes, scale: fit.scale)
       .rendererPosition(

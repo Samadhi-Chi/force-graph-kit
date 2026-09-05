@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Changed
+- Reorganized topic documentation, executable sources, library source groups, policies, and the
+  visionOS sample without changing products, module APIs, platform minimums, or runtime behavior.
+- Added offline Markdown-link validation to the existing Linux/macOS CI matrix.
+- Added generation checks after scheduler suspension points, repaired Apple-only test type
+  inference, and configured unsigned visionOS sample compilation in macOS CI.
+- Made the visionOS sample declare its direct Core dependency and route host interactions through
+  scheduler wake-up before rendering subsequent frames.
+
 ### Added
 - Dimension-generic spatial indexing and Barnes-Hut many-body mode with direct fallback.
 - Cached per-element force providers, graph diagnostics/deltas, async runner, bounds, and fitting.
@@ -9,6 +18,11 @@
 - JSON demo, benchmark executable, example data, wiki adapter, documentation, and CI.
 
 ### Hardened
+- Detect same-revision scene membership and mechanical changes, retain stale-frame rejection across
+  renderer configuration updates, normalize mutable renderer inputs, and guard fit padding/bounds.
+- Preserve original node offsets when Barnes–Hut filters invalid active-axis positions.
+- Preserve proportional node and edge sizes when a valid coordinate scale shrinks graph geometry;
+  graph-unit minimums are applied once before scaling.
 - Preserved the baseline many-body source API while adding explicit algorithm selection.
 - Added bounded orthant and aggregate invariants, per-dimension approximation fixtures, and
   distance/parameter validation coverage.

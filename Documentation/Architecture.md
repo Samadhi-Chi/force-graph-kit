@@ -51,3 +51,7 @@ The RealityKit adapter retains stable roots, uses shared unit sphere/cylinder/co
 ## Scheduler wake and producer sessions
 
 Cooling makes the Scene scheduler dormant: its task ends but its newest-frame stream remains installed. Drag/update hosts call `restart` or the scheduler's `updateScene`; both wake that same stream and the active-task guard prevents duplicate loops. Pause is likewise dormant. `stop`, consumer termination, or replacement by `start` finishes or tears down the subscription. Hosts must stop the scheduler or cancel consumption when the owning view/task ends so a dormant subscription is not retained indefinitely. RealityKit sequence ordering is scoped to an explicit producer session, reset with `beginSession()` when switching controllers.
+
+Every scheduler operation that crosses into the controller revalidates its loop and consumer
+generation after returning to the actor. A paused, stopped, or replaced generation therefore cannot
+publish into a newer continuation or clear the newer loop's task state.

@@ -27,7 +27,7 @@ orientation, accessibility, and entity-pool lifecycle require Xcode validation b
 The example deliberately exposes host-controller callback points instead of speculative gesture
 code. No Apple compilation or execution is claimed.
 
-`Examples/visionOS/HostInteractionCallbacks.swift` provides compile-oriented tap, details,
+`../Examples/visionOS/Sources/ForceGraphVisionSample/HostInteractionCallbacks.swift` provides compile-oriented tap, details,
 drag-begin/change/end, and fit forwarding to `ForceGraphController`. The host app supplies only the
 Apple-SDK-specific targeted gesture and coordinate conversion after validating those APIs in Xcode.
 
@@ -39,6 +39,19 @@ Labels default to none at Scene level. Select `.all`, `.top(_:)`, or `.selectedA
 
 ## Sessions, scale, and invalidation
 
-A synchronizer accepts monotonically increasing sequences from one producer session. Call `beginSession()` before switching controllers or any producer whose sequence restarts; call `reset()` to additionally discard all active entities, typed mappings, and pools. Older frames within a session are rejected. Changing `coordinateSpace` invalidates transforms, materials, and collision sizing and permits the current frame to be reapplied. Changing `labelEntityFactory` removes existing labels and permits recreation. Lowering `poolCapacity` trims both pools immediately.
+A synchronizer accepts monotonically increasing sequences from one producer session. Call `beginSession()` before switching controllers or any producer whose sequence restarts; call `reset()` to additionally discard all active entities, typed mappings, and pools. Older frames within a session remain rejected after configuration changes. Changing `coordinateSpace` invalidates transforms, materials, and collision sizing and permits only the same latest frame to be reapplied. Changing `labelEntityFactory` removes existing labels and likewise permits recreation from that latest frame. Lowering `poolCapacity` trims both pools immediately.
+
+`topologyRevision` remains an optional caller hint. The controller independently advances the
+effective render revision when visible node/link membership changes, including hide/show and
+filtered scenes, so the adapter reconciles ordinary updates even when callers retain the default
+revision value. Link endpoints and mechanical parameters are compared independently for automatic
+reheating; color-only updates preserve cooling state.
 
 Node models use a unit sphere scaled by `visual.radius * coordinateSpace.scale`. Their collision sphere is attached to the unscaled node root with that same final radius, so visual and hit radii match rather than applying radius twice. Zero or invalid radii use the documented minimum visible/hit radius. `element(for:)` walks ancestors and mappings include roots, models, labels, shafts, and arrowheads; recycling and reset remove those mappings.
+
+Renderer-bound coordinates and sizes are normalized again when consumed. Invalid mutated scales use
+the identity scale, non-finite components use zero, and values outside the finite RealityKit float
+boundary are clamped before constructing transforms or collision geometry. The documented
+`1,000,000` renderer-unit safety ceiling applies after scaling; the graph-unit minimum is applied
+before scaling and is not reapplied to ordinary positive renderer sizes, preserving proportional
+zoom for both visible and collision geometry.

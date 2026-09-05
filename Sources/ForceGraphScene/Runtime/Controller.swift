@@ -16,6 +16,7 @@ public actor ForceGraphController<ID: Hashable & Sendable, LinkID: Hashable & Se
   private var visualByID: [ID: NodeVisual] = [:]
   private var visibleIDs: Set<ID> = []
   private var neighbors: [ID: Set<ID>] = [:]
+  private var renderTopologyRevision: UInt64
 
   /// Creates a controller from the scene's normalized subset and performs configured warmup.
   /// - Parameters:
@@ -27,12 +28,13 @@ public actor ForceGraphController<ID: Hashable & Sendable, LinkID: Hashable & Se
     self.simulation = ForceSimulation(
       nodes: normalized.nodes.map(\.physics),
       dimensions: normalized.dimensions, seed: seed)
+    self.renderTopologyRevision = normalized.topologyRevision
     simulation.replaceLinks(normalized.links.map(\.physics))
     simulation.force("charge", .manyBody())
     simulation.force("center", .center())
     simulation.tick(iterations: normalized.policy.warmupTicks)
     for node in normalized.nodes where visualByID[node.physics.id] == nil {
-      visualByID[node.physics.id] = node.visual
+      visualByID[node.physics.id] = node.visual.sanitized
       if node.visual.isVisible { visibleIDs.insert(node.physics.id) }
     }
     for link in normalized.links {
@@ -166,9 +168,11 @@ public actor ForceGraphController<ID: Hashable & Sendable, LinkID: Hashable & Se
   ) -> SceneDiagnostics<ID, LinkID> {
     let diagnostics = updated.diagnostics()
     let normalized = updated.normalized()
-    let mechanicsChanged =
-      normalized.topologyRevision != scene.topologyRevision
-      || normalized.dimensions != scene.dimensions
+    let mechanicsChanged = mechanicsDiffer(scene, normalized)
+    let membershipChanged = renderMembershipDiffers(scene, normalized)
+    if normalized.topologyRevision != scene.topologyRevision || membershipChanged {
+      renderTopologyRevision &+= 1
+    }
     var old: [ID: ForceNode<ID>] = [:]
     for node in simulation.nodes where old[node.id] == nil { old[node.id] = node }
     let merged = normalized.nodes.map { old[$0.physics.id] ?? $0.physics }
@@ -245,12 +249,12 @@ public actor ForceGraphController<ID: Hashable & Sendable, LinkID: Hashable & Se
         id: link.id, source: link.physics.source, target: link.physics.target,
         sourcePosition: (source.x, source.y, source.z),
         targetPosition: (target.x, target.y, target.z),
-        visual: link.visual,
+        visual: link.visual.sanitized,
         highlight: highlighted ? .connected : (selectedID == nil ? .normal : .dimmed))
     }
     return ForceGraphRenderFrame(
       sequence: sequence, alpha: simulation.alpha,
-      dimensions: scene.dimensions, topologyRevision: scene.topologyRevision,
+      dimensions: scene.dimensions, topologyRevision: renderTopologyRevision,
       visualRevision: scene.visualRevision, isLayoutRunning: simulation.isRunning,
       nodes: renderNodes,
       links: renderLinks, selectedID: selectedID, focusedID: focusedID)
@@ -266,7 +270,7 @@ public actor ForceGraphController<ID: Hashable & Sendable, LinkID: Hashable & Se
     visibleIDs.removeAll(keepingCapacity: true)
     neighbors.removeAll(keepingCapacity: true)
     for node in scene.nodes where visualByID[node.physics.id] == nil {
-      visualByID[node.physics.id] = node.visual
+      visualByID[node.physics.id] = node.visual.sanitized
       if node.visual.isVisible { visibleIDs.insert(node.physics.id) }
     }
     for link in scene.links {
@@ -298,5 +302,39 @@ public actor ForceGraphController<ID: Hashable & Sendable, LinkID: Hashable & Se
     let safe = value.isFinite ? max(0, value) : 0.3
     simulation.alpha = max(simulation.alpha, safe)
     simulation.restart()
+  }
+
+  private func mechanicsDiffer(
+    _ old: ForceGraphScene<ID, LinkID>, _ new: ForceGraphScene<ID, LinkID>
+  ) -> Bool {
+    if old.topologyRevision != new.topologyRevision || old.dimensions != new.dimensions
+      || old.nodes.map(\.physics.id) != new.nodes.map(\.physics.id)
+      || old.links.count != new.links.count
+    {
+      return true
+    }
+    return zip(old.links, new.links).contains { oldLink, newLink in
+      oldLink.id != newLink.id || oldLink.physics.source != newLink.physics.source
+        || oldLink.physics.target != newLink.physics.target
+        || oldLink.physics.distance.bitPattern != newLink.physics.distance.bitPattern
+        || oldLink.physics.strength?.bitPattern != newLink.physics.strength?.bitPattern
+    }
+  }
+
+  private func renderMembershipDiffers(
+    _ old: ForceGraphScene<ID, LinkID>, _ new: ForceGraphScene<ID, LinkID>
+  ) -> Bool {
+    let oldVisible = Set(old.nodes.lazy.filter(\.visual.isVisible).map(\.physics.id))
+    let newVisible = Set(new.nodes.lazy.filter(\.visual.isVisible).map(\.physics.id))
+    guard oldVisible == newVisible else { return true }
+    let oldLinks = old.links.compactMap {
+      $0.visual.isVisible && oldVisible.contains($0.physics.source)
+        && oldVisible.contains($0.physics.target) ? $0.id : nil
+    }
+    let newLinks = new.links.compactMap {
+      $0.visual.isVisible && newVisible.contains($0.physics.source)
+        && newVisible.contains($0.physics.target) ? $0.id : nil
+    }
+    return oldLinks != newLinks
   }
 }

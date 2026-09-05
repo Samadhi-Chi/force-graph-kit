@@ -2,6 +2,12 @@
 /// Cooling leaves the stream dormant and resumable; stopping or terminating its consumer tears it
 /// down. Hosts should stop the scheduler or cancel stream consumption when their lifecycle ends.
 public actor ForceGraphSceneScheduler<ID: Hashable & Sendable, LinkID: Hashable & Sendable> {
+  internal enum ReentrancyPoint: Sendable, Equatable {
+    case emit
+    case restart
+    case updateScene
+  }
+
   private let controller: ForceGraphController<ID, LinkID>
   private var task: Task<Void, Never>?
   private var continuation: AsyncStream<ForceGraphRenderFrame<ID, LinkID>>.Continuation?
@@ -9,6 +15,7 @@ public actor ForceGraphSceneScheduler<ID: Hashable & Sendable, LinkID: Hashable 
   private var consumerGeneration: UInt64 = 0
   private var framesPerSecond: Double
   private var ticksPerFrame: Int
+  private var reentrancyProbe: (@Sendable (ReentrancyPoint) async -> Void)?
 
   /// Observable scheduling state for lifecycle coordination and deterministic tests.
   public enum State: Sendable, Equatable {
@@ -72,7 +79,13 @@ public actor ForceGraphSceneScheduler<ID: Hashable & Sendable, LinkID: Hashable 
 
   /// Restarts physics and resumes the current stream, if any.
   public func restart(alpha: Double? = nil) async {
+    let token = generation
+    let consumerToken = consumerGeneration
     await controller.restart(alpha: alpha)
+    await reentrancyProbe?(.restart)
+    guard generation == token, consumerGeneration == consumerToken, continuation != nil else {
+      return
+    }
     resume()
   }
 
@@ -81,13 +94,22 @@ public actor ForceGraphSceneScheduler<ID: Hashable & Sendable, LinkID: Hashable 
   public func updateScene(
     _ scene: ForceGraphScene<ID, LinkID>, policy: SceneUpdatePolicy? = nil
   ) async -> SceneDiagnostics<ID, LinkID> {
+    let token = generation
+    let consumerToken = consumerGeneration
     let diagnostics: SceneDiagnostics<ID, LinkID>
     if let policy {
       diagnostics = await controller.updateScene(scene, policy: policy)
     } else {
       diagnostics = await controller.updateScene(scene)
     }
+    await reentrancyProbe?(.updateScene)
+    guard generation == token, consumerGeneration == consumerToken, continuation != nil else {
+      return diagnostics
+    }
     let frame = await controller.frame()
+    guard generation == token, consumerGeneration == consumerToken, continuation != nil else {
+      return diagnostics
+    }
     continuation?.yield(frame)
     if frame.isLayoutRunning { resume() }
     return diagnostics
@@ -121,8 +143,13 @@ public actor ForceGraphSceneScheduler<ID: Hashable & Sendable, LinkID: Hashable 
   }
 
   private func emit(token: UInt64) async -> UInt64? {
+    let consumerToken = consumerGeneration
     guard generation == token, continuation != nil else { return nil }
     let frame = await controller.tick(iterations: ticksPerFrame)
+    await reentrancyProbe?(.emit)
+    guard generation == token, consumerGeneration == consumerToken, continuation != nil else {
+      return nil
+    }
     continuation?.yield(frame)
     guard frame.isLayoutRunning else {
       task = nil
@@ -134,6 +161,12 @@ public actor ForceGraphSceneScheduler<ID: Hashable & Sendable, LinkID: Hashable 
   private func consumerTerminated(token: UInt64) {
     guard consumerGeneration == token else { return }
     stop()
+  }
+
+  internal func setReentrancyProbe(
+    _ probe: (@Sendable (ReentrancyPoint) async -> Void)?
+  ) {
+    reentrancyProbe = probe
   }
 
   private static func validFPS(_ value: Double) -> Double {

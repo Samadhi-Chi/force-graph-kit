@@ -7,6 +7,7 @@
   // Compile this source in a visionOS app target after adding ForceGraphKit through SwiftPM.
   // The app owns controller lifetime and presents this view in a WindowGroup volumetric style.
   @available(visionOS 2.0, *)
+  @MainActor
   struct ForceGraphVolumeExample: View {
     let controller: ForceGraphController<String, String>
     @State private var synchronizer = RealityKitGraphSynchronizer<String, String>()

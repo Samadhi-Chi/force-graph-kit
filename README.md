@@ -1,6 +1,12 @@
 # ForceGraphKit
 
-ForceGraphKit is a native Swift 6 package for deterministic 1D, 2D, and 3D force-directed layouts. `ForceGraphCore` has no UI or runtime dependencies and builds on Linux.
+ForceGraphKit is a native Swift 6 toolkit for deterministic 1D, 2D, and 3D force-directed graphs.
+Its Linux core has no UI, renderer, third-party runtime, or Apple-framework dependency.
+
+## Installation and quick start
+
+Add this package with Swift Package Manager and link `ForceGraphCore`; add `ForceGraphScene` and
+`ForceGraphRealityKit` only when their higher-level responsibilities are needed.
 
 ```swift
 import ForceGraphCore
@@ -16,62 +22,53 @@ simulation.tick(iterations: 60)
 let frame = simulation.snapshots()
 ```
 
-## Scope and caveats
+Stable IDs are the ownership boundary. Keep mutable simulations or controllers with one actor/task
+and transfer immutable, `Sendable` snapshots between concurrency domains.
 
-Tests cover d3-force-3d's deterministic initial coordinates, default LCG sequence,
-alpha cooling, velocity integration, fixed-axis behavior, insertion-ordered forces, and
-degree-biased links. See [D3_COMPATIBILITY.md](D3_COMPATIBILITY.md) for precise limits.
-Many-body defaults to a deterministic Barnes-Hut orthant tree and retains an explicit O(n²)
-direct reference mode. Constant-radius collision remains O(n²); cached per-node-radius
-collision uses the spatial index as a broad phase. Benchmark your actual graph and force mix.
+## Products
 
-Linux validates ForceGraphCore, ForceGraphScene, the demo, and benchmark. RealityKit entity
-synchronization source is now isolated in an Apple-only conditional target, but no RealityKit,
-visionOS, Xcode, compositor, gesture, simulator, or device validation has occurred.
+- **ForceGraphCore** — deterministic simulation, direct/Barnes–Hut charge, collision and link
+  forces, spatial queries, graph deltas, async frames, bounds, and volume fitting.
+- **ForceGraphScene** — UI-neutral visuals, labels, filtering, selection/highlighting, interaction
+  intents, synchronized endpoints, reversible coordinates, drag lifecycle, and scheduling.
+- **ForceGraphRealityKit** — optional, conditionally compiled Apple entity synchronization with
+  stable typed identity, shared meshes, bounded pools, and host-controlled labels.
+- **force-graph-demo / force-graph-benchmark** — Linux-compatible JSON smoke output and diagnostic
+  timing, still run from the repository root with `swift run -c release <product>`.
 
-## Dragging
+## Capability and validation status
 
-On drag start, set the node's `fx`/`fy`/`fz`, set `alphaTarget` (for example `0.3`), and call `restart()`. Update fixed coordinates as the gesture moves and tick continuously so neighboring nodes respond. On end, set the desired fixed axes to `nil`, set `alphaTarget = 0`, and continue ticking to cool; retain them to pin the node.
+Linux release builds and tests cover Core and Scene behavior, deterministic initialization and
+cooling, stable endpoint resolution, spatial algorithms, coordinate mapping, and scheduler
+lifecycle. D3 compatibility is semantic and scoped rather than JavaScript source compatibility or
+complete numerical parity. Benchmark results are diagnostics, not unit-test thresholds.
 
-## Safety
+RealityKit source and conditional tests are isolated behind platform/import guards. This repository
+state does not claim Xcode, Apple SDK, visionOS simulator, gesture, compositor, Instruments, or
+device validation. See the acceptance guide before making Apple-platform claims.
 
-Non-finite initial positions are initialized deterministically and non-finite velocities are zeroed. Coincident pairs receive seeded microscopic jiggle. Invalid force parameters disable the affected force; simulation decay parameters are clamped. Non-finite integration output is reset to zero rather than contaminating the graph.
-
-## Milestone roadmap
-
-1. **Core parity:** broaden upstream reference fixtures and refine accessor cache lifecycle.
-2. **Spatial performance:** optimize and benchmark tree construction, nearest search, and
-   constant-radius collision while retaining direct reference paths.
-3. **RealityKit adapter:** validate and harden the conditional entity synchronizer and add
-   host-app gesture coordinate conversion.
-4. **visionOS acceptance:** validate Xcode builds, simulator behavior, frame pacing,
-   gestures, and final interaction quality on real hardware.
+The Scene scheduler uses newest-frame backpressure and one tick loop. Cooling stops only that loop;
+the stream stays dormant until resume, restart, or a mechanical scene update. Stop the scheduler or
+cancel consumption when its host lifecycle ends.
 
 ## Development
 
 ```sh
 swift build -c release
 swift test -c release
+swift run -c release force-graph-demo
+swift run -c release force-graph-benchmark 100 1000 5000
+python3 Scripts/validate-markdown-links.py --self-test
 ```
 
-## Products
+The Markdown check verifies supported local link targets exist. It ignores external URLs and does
+not validate heading anchors.
 
-- **ForceGraphCore** — deterministic layout, direct/Barnes-Hut charge, cached providers,
-  spatial queries, graph deltas, async frames, bounds, and volume fitting.
-- **ForceGraphScene** — stable visual identity, labels, visibility, selection/highlighting,
-  filtering, interaction intents, synchronized edge endpoints, and drag lifecycle.
-- **ForceGraphRealityKit** — conditionally compiled Apple entity synchronization source;
-  unverified on Linux and not yet accepted for Apple release.
-- **force-graph-demo / force-graph-benchmark** — Linux-compatible JSON smoke output and
-  timing diagnostics.
+## Documentation
 
-See [Getting Started](GETTING_STARTED.md), [Performance](PERFORMANCE.md),
-[feature coverage](FEATURE_MATRIX.md), [RealityKit integration](REALITYKIT_INTEGRATION.md), and
-[visionOS acceptance gates](VISIONOS_ACCEPTANCE.md). A Chinese overview is available in
-[README.zh-CN.md](README.zh-CN.md).
-
-## v0.2 Scene and RealityKit baseline
-
-`GraphCoordinateSpace` maps 1D/2D/3D layouts through XYZ, XY, XZ, or YZ conventions, supports Core-backed volume fitting, and reverses renderer drag positions. Scene frames expose topology/visual revisions and scheduling state. `ForceGraphSceneScheduler` uses newest-frame backpressure and prevents duplicate loops. Cooling stops only its tick loop: the same stream remains dormant until `resume`, `restart`, or a mechanical scene update wakes it. `stop`, consumer termination, or replacement by `start` tears down the subscription. Stop the scheduler or cancel consumption when the owning view/task ends.
-
-RealityKit synchronization uses stable entities and shared unit meshes, typed node/link lookup, stale-frame rejection, bounded pools, selective host-created labels, highlight materials, and optional straight-link direction cones. See the standalone `Examples/visionOS` package. These Apple-conditional APIs have not been compiled or run in this Linux environment.
+Start with the [documentation index](Documentation/README.md), then consult
+[getting started](Documentation/GettingStarted.md), [architecture](Documentation/Architecture.md),
+[D3 compatibility](Documentation/D3Compatibility.md), the [feature matrix](Documentation/FeatureMatrix.md),
+[RealityKit integration](Documentation/RealityKitIntegration.md), [performance](Documentation/Performance.md),
+and [visionOS acceptance](Documentation/VisionOSAcceptance.md). See [examples](Examples/README.md),
+[repository layout](Documentation/RepositoryLayout.md), and the [Chinese README](README.zh-CN.md).

@@ -35,7 +35,7 @@
       didSet {
         guard coordinateSpace != oldValue else { return }
         invalidateVisualState()
-        lastSequence = nil
+        configurationNeedsReapply = true
       }
     }
     /// Maximum retained node and edge entities per pool.
@@ -76,6 +76,7 @@
     private var pooledEdges: [(Entity, ModelEntity, ModelEntity)] = []
     private var lastSequence: UInt64?
     private var lastTopologyRevision: UInt64?
+    private var configurationNeedsReapply = false
     private let sphereMesh = MeshResource.generateSphere(radius: 1)
     private let cylinderMesh = MeshResource.generateCylinder(height: 1, radius: 1)
     private let arrowMesh = MeshResource.generateCone(height: 1, radius: 0.5)
@@ -116,6 +117,7 @@
     public func beginSession() {
       lastSequence = nil
       lastTopologyRevision = nil
+      configurationNeedsReapply = false
     }
 
     /// Clears sequence state, active identity mappings, entities, and bounded pools.
@@ -127,12 +129,17 @@
       reverse.removeAll(keepingCapacity: false)
       lastSequence = nil
       lastTopologyRevision = nil
+      configurationNeedsReapply = false
     }
 
     /// Applies one authoritative frame. Duplicate or older sequence numbers are ignored.
     public func synchronize(frame: ForceGraphRenderFrame<ID, LinkID>) {
-      if let lastSequence, frame.sequence <= lastSequence { return }
+      if let lastSequence {
+        if frame.sequence < lastSequence { return }
+        if frame.sequence == lastSequence, !configurationNeedsReapply { return }
+      }
       lastSequence = frame.sequence
+      configurationNeedsReapply = false
       if lastTopologyRevision != frame.topologyRevision {
         reconcileTopology(frame)
         lastTopologyRevision = frame.topologyRevision
@@ -169,7 +176,7 @@
         forGraph: GraphPosition3D(
           x: node.snapshot.x, y: node.snapshot.y, z: node.snapshot.z))
       record.root.position = [finite(position.x), finite(position.y), finite(position.z)]
-      let radius = Float(max(0.001, node.visual.radius)) * Float(coordinateSpace.scale)
+      let radius = renderSize(node.visual.radius, minimum: 0.001)
       record.model.scale = [radius, radius, radius]
       if record.visual != node.visual || record.highlight != node.highlight {
         record.model.model?.materials = [material(node.visual.color, highlight: node.highlight)]
@@ -230,7 +237,7 @@
       record.root.isEnabled = true
       record.root.position = (source + target) / 2
       record.root.orientation = orientationAligningYAxis(to: (target - source) / length)
-      let width = Float(max(0.0005, link.visual.width)) * Float(coordinateSpace.scale)
+      let width = renderSize(link.visual.width, minimum: 0.0005)
       record.shaft.scale = [width, length, width]
       record.arrow.isEnabled = link.visual.isDirectional
       record.arrow.position = [0, length / 2, 0]
@@ -280,7 +287,19 @@
         roughness: highlight == .selected ? 0.25 : 0.65,
         isMetallic: highlight == .hovered)
     }
-    private func finite(_ value: Double) -> Float { value.isFinite ? Float(value) : 0 }
+    private func finite(_ value: Double) -> Float {
+      guard value.isFinite else { return 0 }
+      return Float(max(-1_000_000, min(1_000_000, value)))
+    }
+    private func renderSize(_ value: Double, minimum: Double) -> Float {
+      let scale =
+        coordinateSpace.scale.isFinite && coordinateSpace.scale > 0
+        ? coordinateSpace.scale : 1
+      let graphSize = max(minimum, value.isFinite ? value : minimum)
+      let scaled = graphSize * scale
+      guard scaled.isFinite else { return 1_000_000 }
+      return Float(min(1_000_000, max(Double(Float.leastNormalMagnitude), scaled)))
+    }
     private func orientationAligningYAxis(to direction: SIMD3<Float>) -> simd_quatf {
       let axis = SIMD3<Float>(0, 1, 0)
       let cosine = max(-1, min(1, simd_dot(axis, direction)))
@@ -308,7 +327,7 @@
         record.label = nil
         nodes[id] = record
       }
-      lastSequence = nil
+      configurationNeedsReapply = true
     }
   }
 #endif

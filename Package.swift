@@ -15,8 +15,11 @@ let package = Package(
     .target(name: "ForceGraphCore"),
     .target(name: "ForceGraphScene", dependencies: ["ForceGraphCore"]),
     .target(name: "ForceGraphRealityKit", dependencies: ["ForceGraphScene"]),
-    .executableTarget(name: "ForceGraphDemo", dependencies: ["ForceGraphCore"]),
-    .executableTarget(name: "ForceGraphBenchmark", dependencies: ["ForceGraphCore"]),
+    .executableTarget(
+      name: "ForceGraphDemo", dependencies: ["ForceGraphCore"], path: "Examples/CLI"),
+    .executableTarget(
+      name: "ForceGraphBenchmark", dependencies: ["ForceGraphCore"],
+      path: "Benchmarks/ForceGraphBenchmark"),
     .testTarget(name: "ForceGraphCoreTests", dependencies: ["ForceGraphCore"]),
     .testTarget(name: "ForceGraphSceneTests", dependencies: ["ForceGraphScene"]),
     .testTarget(
