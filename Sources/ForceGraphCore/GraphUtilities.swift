@@ -186,6 +186,18 @@ public struct LayoutBounds: Sendable, Equatable {
   public var height: Double { maximumY - minimumY }
   /// Depth on z.
   public var depth: Double { maximumZ - minimumZ }
+  /// Creates explicit finite or diagnostic bounds.
+  public init(
+    minimumX: Double, minimumY: Double, minimumZ: Double,
+    maximumX: Double, maximumY: Double, maximumZ: Double
+  ) {
+    self.minimumX = minimumX
+    self.minimumY = minimumY
+    self.minimumZ = minimumZ
+    self.maximumX = maximumX
+    self.maximumY = maximumY
+    self.maximumZ = maximumZ
+  }
 }
 
 /// Uniform translation and scale for fitting a layout into a renderer-owned volume.

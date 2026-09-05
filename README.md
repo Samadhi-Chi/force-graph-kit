@@ -69,3 +69,9 @@ See [Getting Started](GETTING_STARTED.md), [Performance](PERFORMANCE.md),
 [feature coverage](FEATURE_MATRIX.md), [RealityKit integration](REALITYKIT_INTEGRATION.md), and
 [visionOS acceptance gates](VISIONOS_ACCEPTANCE.md). A Chinese overview is available in
 [README.zh-CN.md](README.zh-CN.md).
+
+## v0.2 Scene and RealityKit baseline
+
+`GraphCoordinateSpace` maps 1D/2D/3D layouts through XYZ, XY, XZ, or YZ conventions, supports Core-backed volume fitting, and reverses renderer drag positions. Scene frames expose topology/visual revisions and scheduling state. `ForceGraphSceneScheduler` uses newest-frame backpressure and prevents duplicate loops. Cooling stops only its tick loop: the same stream remains dormant until `resume`, `restart`, or a mechanical scene update wakes it. `stop`, consumer termination, or replacement by `start` tears down the subscription. Stop the scheduler or cancel consumption when the owning view/task ends.
+
+RealityKit synchronization uses stable entities and shared unit meshes, typed node/link lookup, stale-frame rejection, bounded pools, selective host-created labels, highlight materials, and optional straight-link direction cones. See the standalone `Examples/visionOS` package. These Apple-conditional APIs have not been compiled or run in this Linux environment.

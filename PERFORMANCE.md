@@ -15,3 +15,9 @@ streams use newest-only buffering to apply backpressure.
 Run `swift run -c release force-graph-benchmark 100 1000 5000`. Results are diagnostics, not test
 thresholds: hardware, thermal state, compiler, graph distribution, theta, and force mix matter.
 No performance claim should be extrapolated to RealityKit rendering until profiled on Apple hardware.
+
+## Scene/RealityKit synchronization
+
+Topology-stable Scene frames reuse visibility and adjacency caches. RealityKit uses unit meshes and transform scaling instead of generating cylinders or spheres per frame; style/highlight transitions gate material updates, and removal pools have a caller-controlled cap. Frame sequence rejection prevents old work from overwriting newer transforms. Benchmark output below remains physics-only; Apple Instruments measurements are still required for entity synchronization.
+
+A cooled or paused Scene scheduler retains its resumable stream but owns no sleeping/polling task. Restart and mechanical scene updates install at most one new loop. Explicit `stop`, consumer termination, or subscription replacement performs teardown; hosts should use one of those paths when their lifecycle ends. RealityKit topology sets are rebuilt only when `topologyRevision` changes; coordinate and label-factory invalidation is configuration-driven rather than a stable-frame hot-path operation.

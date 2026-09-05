@@ -16,3 +16,14 @@
   and made missing interactions safe no-ops.
 - Made async runner generations and intent-stream termination deterministic and leak-resistant.
 - Added explicit stable-ID node state patches and hardened provider caches for duplicate IDs.
+
+### v0.2 scene / RealityKit baseline
+- Added reversible axis mapping and Core-backed volume fit, revisioned frames, update reheating policies, and a cooling-aware newest-frame scheduler.
+- Added configurable label visibility and host label factories, complete node/link highlight styling, and reusable directional cones.
+- Reworked RealityKit synchronization around stable typed lookup, shared unit meshes, transform-only edge updates, stale-frame rejection, and bounded pools.
+- Added conditional RealityKit tests and a standalone visionOS 2 volumetric sample package.
+
+### Fixed after adversarial v0.2 review
+- Kept cooled scheduler streams installed and resumable without polling; added explicit scheduler scene updates, lifecycle state, cancellation cleanup, and single-loop restart behavior.
+- Clarified that only stop, consumer termination, or subscription replacement tears down the stream, and documented host lifecycle cleanup.
+- Added explicit RealityKit producer-session reset, immediate pool trimming, configuration invalidation, label descendant identity cleanup, and root-space collision shapes that avoid radius double scaling.

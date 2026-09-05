@@ -10,15 +10,16 @@
   struct ForceGraphVolumeExample: View {
     let controller: ForceGraphController<String, String>
     @State private var synchronizer = RealityKitGraphSynchronizer<String, String>()
+    let scheduler: ForceGraphSceneScheduler<String, String>
 
     var body: some View {
       RealityView { content in content.add(synchronizer.root) }
         .task {
-          while !Task.isCancelled {
-            synchronizer.synchronize(frame: await controller.tick())
-            try? await Task.sleep(for: .milliseconds(16))
+          for await frame in await scheduler.start() {
+            synchronizer.synchronize(frame: frame)
           }
         }
+        .onDisappear { Task { await scheduler.stop() } }
       // Add targeted spatial tap/drag gestures in the host app and forward world-space
       // coordinates to beginDrag/updateDrag/endDrag. Details remain application-owned.
     }
