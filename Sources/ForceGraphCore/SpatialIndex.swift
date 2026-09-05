@@ -32,6 +32,8 @@ public struct SpatialIndex<ID: Hashable & Sendable>: Sendable {
   public let dimensions: SimulationDimensions
   /// Indexed points in deterministic input order.
   public let points: [SpatialPoint<ID>]
+  /// Original input offsets for validated points. Tree cell indices address this array.
+  let sourceIndices: [Int]
   var cells: [Cell] = []
   let leafCapacity: Int
   let maximumDepth: Int
@@ -42,10 +44,12 @@ public struct SpatialIndex<ID: Hashable & Sendable>: Sendable {
     leafCapacity: Int = 8, maximumDepth: Int = 32
   ) {
     self.dimensions = dimensions
-    self.points = points.filter {
-      $0.x.isFinite && (dimensions == .one || $0.y.isFinite)
-        && (dimensions != .three || $0.z.isFinite)
+    let validated = points.enumerated().filter {
+      $0.element.x.isFinite && (dimensions == .one || $0.element.y.isFinite)
+        && (dimensions != .three || $0.element.z.isFinite)
     }
+    self.points = validated.map(\.element)
+    self.sourceIndices = validated.map(\.offset)
     self.leafCapacity = max(1, leafCapacity)
     self.maximumDepth = max(1, maximumDepth)
     build()

@@ -16,3 +16,14 @@
 | RealityKit entity synchronization | Source implemented/unverified | Conditional target; API requires macOS 15, iOS 18, or visionOS 2 |
 | SwiftUI RealityView application | Example source/unverified | Host application owns lifecycle and UI |
 | visionOS simulator/device acceptance | Deferred | Explicit maintainer gates |
+
+## v0.2 additions
+
+| Capability | State | Scope |
+|---|---|---|
+| Reversible XY/XZ/YZ/XYZ mapping and volume fit | Linux tested | Scene contract using Core fit |
+| Scene update reheat policy and revision metadata | Linux tested | Stable-ID dynamics retained |
+| Cooling-aware newest-frame scheduler | Linux tested | UI-neutral actor |
+| Typed RealityKit entity lookup, bounded pools, unit meshes | Apple-conditional source/tests | Requires Apple SDK execution |
+| Label visibility policy and custom entity factory | Scene tested / adapter conditional | No built-in text allocation |
+| Direction indicator | Adapter source implemented | Straight shaft plus optional cone |

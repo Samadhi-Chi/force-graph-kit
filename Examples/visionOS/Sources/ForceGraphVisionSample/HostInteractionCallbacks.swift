@@ -11,18 +11,27 @@ struct HostInteractionCallbacks: Sendable {
   let dragEnded: @Sendable (_ nodeID: String, _ keepPinned: Bool) async -> Void
   let fit: @Sendable () async -> Void
 
-  static func forwarding(to controller: ForceGraphController<String, String>) -> Self {
+  static func forwarding(
+    to controller: ForceGraphController<String, String>,
+    scheduler: ForceGraphSceneScheduler<String, String>
+  ) -> Self {
     Self(
-      tap: { await controller.select($0) },
+      tap: {
+        await controller.select($0)
+        await scheduler.restart()
+      },
       details: { await controller.requestDetails(for: $0) },
       dragBegan: { id, point in
         await controller.beginDrag(id: id, x: point.x, y: point.y, z: point.z)
+        await scheduler.resume()
       },
       dragChanged: { id, point in
         await controller.updateDrag(id: id, x: point.x, y: point.y, z: point.z)
+        await scheduler.resume()
       },
       dragEnded: { id, keepPinned in
         await controller.endDrag(id: id, keepPinned: keepPinned)
+        await scheduler.resume()
       },
       fit: { await controller.requestFit() })
   }

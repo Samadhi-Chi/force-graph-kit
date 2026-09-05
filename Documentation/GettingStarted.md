@@ -17,9 +17,13 @@ let frame = layout.snapshots()
 
 Stable IDs are the ownership boundary. Use graph deltas or scene updates rather than rebuilding
 IDs. Own mutable simulations/controllers in one actor. Set fixed coordinates and reheat alpha
-while dragging. See `Examples/WikiAdapter` and `Examples/visionOS` for integration shapes.
+while dragging. See `../Examples/WikiAdapter` and `../Examples/visionOS` for integration shapes.
 
 Cached force providers are revision-based: construct them with the nodes or links whose metadata
 they read, and recreate that force when the relevant metadata changes. Use `validateGraph` or
 `ForceGraphScene.diagnostics()` before applying external graph data; controllers deterministically
 retain the first duplicate identity and omit unresolved and self-referential links.
+
+Scene revisions are optimization hints rather than correctness requirements. Ordinary node/link
+membership changes are detected by stable ID, and link endpoint, distance, or strength changes
+reheat under the automatic policy. Pure visual changes preserve a cooled layout.
