@@ -13,6 +13,9 @@ public actor ForceGraphController<ID: Hashable & Sendable, LinkID: Hashable & Se
   private var sequence: UInt64 = 0
   private var intentContinuation: AsyncStream<ForceGraphIntent<ID>>.Continuation?
   private var intentGeneration: UInt64 = 0
+  private var visualByID: [ID: NodeVisual] = [:]
+  private var visibleIDs: Set<ID> = []
+  private var neighbors: [ID: Set<ID>] = [:]
 
   /// Creates a controller from the scene's normalized subset and performs configured warmup.
   /// - Parameters:
@@ -28,6 +31,14 @@ public actor ForceGraphController<ID: Hashable & Sendable, LinkID: Hashable & Se
     simulation.force("charge", .manyBody())
     simulation.force("center", .center())
     simulation.tick(iterations: normalized.policy.warmupTicks)
+    for node in normalized.nodes where visualByID[node.physics.id] == nil {
+      visualByID[node.physics.id] = node.visual
+      if node.visual.isVisible { visibleIDs.insert(node.physics.id) }
+    }
+    for link in normalized.links {
+      neighbors[link.physics.source, default: []].insert(link.physics.target)
+      neighbors[link.physics.target, default: []].insert(link.physics.source)
+    }
   }
 
   deinit { intentContinuation?.finish() }
@@ -56,6 +67,18 @@ public actor ForceGraphController<ID: Hashable & Sendable, LinkID: Hashable & Se
   /// Returns current state without advancing physics.
   public func frame() -> ForceGraphRenderFrame<ID, LinkID> { makeFrame() }
 
+  /// Restarts layout scheduling, optionally raising alpha to a finite value.
+  public func restart(alpha: Double? = nil) {
+    if let alpha { reheat(alpha) } else { simulation.restart() }
+    sequence &+= 1
+  }
+
+  /// Stops scheduled layout work; manual ``tick(iterations:)`` remains available.
+  public func stop() {
+    simulation.stop()
+    sequence &+= 1
+  }
+
   /// Selects a visible node or clears selection with `nil`; unknown/hidden IDs do nothing.
   public func select(_ id: ID?) {
     if let id {
@@ -65,6 +88,7 @@ public actor ForceGraphController<ID: Hashable & Sendable, LinkID: Hashable & Se
       selectedID = nil
     }
     intentContinuation?.yield(.selected(selectedID))
+    sequence &+= 1
   }
 
   /// Sets hover for a visible node or clears it with `nil`; unknown/hidden IDs do nothing.
@@ -75,6 +99,7 @@ public actor ForceGraphController<ID: Hashable & Sendable, LinkID: Hashable & Se
     } else {
       hoveredID = nil
     }
+    sequence &+= 1
   }
 
   /// Focuses a visible node or clears focus with `nil`; unknown/hidden IDs do nothing.
@@ -86,6 +111,7 @@ public actor ForceGraphController<ID: Hashable & Sendable, LinkID: Hashable & Se
       focusedID = nil
     }
     intentContinuation?.yield(.focused(focusedID))
+    sequence &+= 1
   }
 
   /// Requests application-owned details for a visible node. Unknown/hidden IDs do nothing.
@@ -103,11 +129,12 @@ public actor ForceGraphController<ID: Hashable & Sendable, LinkID: Hashable & Se
     selectedID = id
     simulation.alphaTarget = scene.policy.dragAlphaTarget
     simulation.restart()
+    sequence &+= 1
   }
 
   /// Updates a visible dragged node's active fixed coordinates. Invalid values do nothing.
   public func updateDrag(id: ID, x: Double, y: Double = 0, z: Double = 0) {
-    _ = updatePin(id: id, x: x, y: y, z: z)
+    if updatePin(id: id, x: x, y: y, z: z) { sequence &+= 1 }
   }
 
   /// Ends drag for a visible node, optionally retaining its pin, then cools per policy.
@@ -121,6 +148,7 @@ public actor ForceGraphController<ID: Hashable & Sendable, LinkID: Hashable & Se
       }
     }
     simulation.alphaTarget = scene.policy.releaseAlphaTarget
+    sequence &+= 1
   }
 
   /// Replaces scene data using its normalized subset while preserving position, velocity, and
@@ -128,8 +156,19 @@ public actor ForceGraphController<ID: Hashable & Sendable, LinkID: Hashable & Se
   /// - Returns: Diagnostics for the unnormalized input revision.
   @discardableResult
   public func updateScene(_ updated: ForceGraphScene<ID, LinkID>) -> SceneDiagnostics<ID, LinkID> {
+    updateScene(updated, policy: updated.policy.sceneUpdate)
+  }
+
+  /// Replaces scene data while explicitly controlling layout reheating.
+  @discardableResult
+  public func updateScene(
+    _ updated: ForceGraphScene<ID, LinkID>, policy updatePolicy: SceneUpdatePolicy
+  ) -> SceneDiagnostics<ID, LinkID> {
     let diagnostics = updated.diagnostics()
     let normalized = updated.normalized()
+    let mechanicsChanged =
+      normalized.topologyRevision != scene.topologyRevision
+      || normalized.dimensions != scene.dimensions
     var old: [ID: ForceNode<ID>] = [:]
     for node in simulation.nodes where old[node.id] == nil { old[node.id] = node }
     let merged = normalized.nodes.map { old[$0.physics.id] ?? $0.physics }
@@ -137,9 +176,17 @@ public actor ForceGraphController<ID: Hashable & Sendable, LinkID: Hashable & Se
     simulation.replaceNodes(merged)
     simulation.setDimensions(normalized.dimensions)
     simulation.replaceLinks(normalized.links.map(\.physics))
+    rebuildSceneCache()
+    switch updatePolicy {
+    case .preserve: break
+    case .restart: simulation.restart()
+    case .reheat(let alpha): reheat(alpha)
+    case .automatic(let alpha): if mechanicsChanged { reheat(alpha) }
+    }
     if !validVisible(selectedID) { selectedID = nil }
     if !validVisible(focusedID) { focusedID = nil }
     if !validVisible(hoveredID) { hoveredID = nil }
+    sequence &+= 1
     return diagnostics
   }
 
@@ -158,7 +205,7 @@ public actor ForceGraphController<ID: Hashable & Sendable, LinkID: Hashable & Se
 
   private func validVisible(_ id: ID?) -> Bool {
     guard let id else { return false }
-    return scene.nodes.contains { $0.physics.id == id && $0.visual.isVisible }
+    return visibleIDs.contains(id)
   }
 
   private func makeFrame() -> ForceGraphRenderFrame<ID, LinkID> {
@@ -167,20 +214,8 @@ public actor ForceGraphController<ID: Hashable & Sendable, LinkID: Hashable & Se
     for snapshot in snapshots where positions[snapshot.id] == nil {
       positions[snapshot.id] = snapshot
     }
-    var visualByID: [ID: NodeVisual] = [:]
-    for node in scene.nodes where visualByID[node.physics.id] == nil {
-      visualByID[node.physics.id] = node.visual
-    }
-    let visibleIDs = Set(visualByID.compactMap { $0.value.isVisible ? $0.key : nil })
-    let connected: Set<ID> =
-      selectedID.map { selected in
-        Set(
-          scene.links.flatMap { link -> [ID] in
-            if link.physics.source == selected { return [link.physics.target] }
-            if link.physics.target == selected { return [link.physics.source] }
-            return []
-          })
-      } ?? []
+    let connected = selectedID.flatMap { neighbors[$0] } ?? []
+    let labelIDs = visibleLabelIDs(connected: connected)
     let renderNodes = snapshots.compactMap { snapshot -> RenderNode<ID>? in
       guard let visual = visualByID[snapshot.id], visual.isVisible else { return nil }
       let highlight: HighlightState
@@ -195,7 +230,9 @@ public actor ForceGraphController<ID: Hashable & Sendable, LinkID: Hashable & Se
       } else {
         highlight = .normal
       }
-      return RenderNode(snapshot: snapshot, visual: visual, highlight: highlight)
+      return RenderNode(
+        snapshot: snapshot, visual: visual, highlight: highlight,
+        isLabelVisible: labelIDs.contains(snapshot.id) && !visual.label.isEmpty)
     }
     let renderLinks = scene.links.compactMap { link -> RenderLink<ID, LinkID>? in
       guard link.visual.isVisible,
@@ -208,16 +245,58 @@ public actor ForceGraphController<ID: Hashable & Sendable, LinkID: Hashable & Se
         id: link.id, source: link.physics.source, target: link.physics.target,
         sourcePosition: (source.x, source.y, source.z),
         targetPosition: (target.x, target.y, target.z),
-        visual: link.visual, highlight: highlighted ? .connected : .normal)
+        visual: link.visual,
+        highlight: highlighted ? .connected : (selectedID == nil ? .normal : .dimmed))
     }
     return ForceGraphRenderFrame(
       sequence: sequence, alpha: simulation.alpha,
-      dimensions: scene.dimensions, nodes: renderNodes,
+      dimensions: scene.dimensions, topologyRevision: scene.topologyRevision,
+      visualRevision: scene.visualRevision, isLayoutRunning: simulation.isRunning,
+      nodes: renderNodes,
       links: renderLinks, selectedID: selectedID, focusedID: focusedID)
   }
 
   private func intentTerminated(token: UInt64) {
     guard intentGeneration == token else { return }
     intentContinuation = nil
+  }
+
+  private func rebuildSceneCache() {
+    visualByID.removeAll(keepingCapacity: true)
+    visibleIDs.removeAll(keepingCapacity: true)
+    neighbors.removeAll(keepingCapacity: true)
+    for node in scene.nodes where visualByID[node.physics.id] == nil {
+      visualByID[node.physics.id] = node.visual
+      if node.visual.isVisible { visibleIDs.insert(node.physics.id) }
+    }
+    for link in scene.links {
+      neighbors[link.physics.source, default: []].insert(link.physics.target)
+      neighbors[link.physics.target, default: []].insert(link.physics.source)
+    }
+  }
+
+  private func visibleLabelIDs(connected: Set<ID>) -> Set<ID> {
+    switch scene.policy.labelVisibility {
+    case .none: return []
+    case .all: return visibleIDs
+    case .selectedAndNeighbors:
+      var result = connected.intersection(visibleIDs)
+      if let selectedID, visibleIDs.contains(selectedID) { result.insert(selectedID) }
+      return result
+    case .top(let count):
+      guard count > 0 else { return [] }
+      return Set(
+        scene.nodes.enumerated().filter { visibleIDs.contains($0.element.physics.id) }
+          .sorted {
+            $0.element.visual.value == $1.element.visual.value
+              ? $0.offset < $1.offset : $0.element.visual.value > $1.element.visual.value
+          }.prefix(count).map { $0.element.physics.id })
+    }
+  }
+
+  private func reheat(_ value: Double) {
+    let safe = value.isFinite ? max(0, value) : 0.3
+    simulation.alpha = max(simulation.alpha, safe)
+    simulation.restart()
   }
 }

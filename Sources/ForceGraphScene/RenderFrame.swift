@@ -22,6 +22,8 @@ public struct RenderNode<ID: Hashable & Sendable>: Sendable {
   public let visual: NodeVisual
   /// Controller-computed interaction styling.
   public let highlight: HighlightState
+  /// Whether a renderer should create or show this node's label.
+  public let isLabelVisible: Bool
 }
 
 /// Edge payload containing endpoint positions from the same frame as its nodes and labels.
@@ -51,6 +53,12 @@ public struct ForceGraphRenderFrame<ID: Hashable & Sendable, LinkID: Hashable & 
   public let alpha: Double
   /// Active dimensions.
   public let dimensions: SimulationDimensions
+  /// Scene topology revision represented by this frame.
+  public let topologyRevision: UInt64
+  /// Scene visual revision represented by this frame.
+  public let visualRevision: UInt64
+  /// Whether physics still requires scheduled ticks.
+  public let isLayoutRunning: Bool
   /// Visible nodes and their attached-label metadata.
   public let nodes: [RenderNode<ID>]
   /// Visible resolvable links.

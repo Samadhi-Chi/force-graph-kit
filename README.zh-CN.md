@@ -56,3 +56,9 @@ RealityKit 源代码仅经过条件编译边界和代码审查；Apple API 编�
 - `PERFORMANCE.md`
 - `REALITYKIT_INTEGRATION.md`
 - `VISIONOS_ACCEPTANCE.md`
+
+## v0.2 Scene / RealityKit 基线
+
+`GraphCoordinateSpace` 为 1D/2D/3D 提供 XYZ、XY、XZ、YZ 轴映射、基于 Core 的体积适配和可逆拖拽坐标。Scene 帧包含拓扑/视觉 revision 与运行状态；调度 actor 使用 newest-frame 背压。冷却只停止 tick 循环，同一个 stream 保持 dormant，可由 `resume`、`restart` 或力学场景更新唤醒；`stop`、消费者终止或新的 `start` 替换订阅时才完成或清理订阅。宿主视图或任务结束时应调用 `stop` 或取消消费，避免长期保留 dormant 订阅。
+
+RealityKit 同步器复用单位网格与稳定实体，提供类型安全的节点/边双向查询、过期帧保护、有界对象池、可选择且由宿主创建的标签，以及方向锥体。`Examples/visionOS` 是独立的最小体积窗口 Swift 包。本 Linux 环境未编译或运行 Apple SDK、模拟器或真机路径。
