@@ -282,6 +282,10 @@ private func applyBarnesHut<ID>(
   let counts = aggregates.map(\.count)
   let centers = aggregates.map { (x: $0.x, y: $0.y, z: $0.z) }
   for target in nodes.indices {
+    guard nodes[target].x.isFinite,
+      dimensions == .one || nodes[target].y.isFinite,
+      dimensions != .three || nodes[target].z.isFinite
+    else { continue }
     var stack = [0]
     while let cellIndex = stack.popLast() {
       let cell = tree.cells[cellIndex]
@@ -306,7 +310,9 @@ private func applyBarnesHut<ID>(
         let scale = strength * alpha * Double(counts[cellIndex]) / squared
         applyVelocity(delta, scale: scale, to: &nodes[target], sign: 1, dimensions: dimensions)
       } else if cell.children.isEmpty {
-        for other in cell.indices where other != target {
+        for pointIndex in cell.indices {
+          let other = tree.sourceIndices[pointIndex]
+          guard other != target else { continue }
           var direct = displacement(nodes[target], nodes[other], dimensions)
           jiggleIfZero(&direct, dimensions: dimensions, random: &random)
           var directSquared = lengthSquared(direct)

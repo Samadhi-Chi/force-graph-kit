@@ -52,6 +52,36 @@ public struct NodeVisual: Sendable, Equatable {
   }
 }
 
+extension NodeVisual {
+  var sanitized: Self {
+    Self(label: label, color: color, radius: radius, value: value, isVisible: isVisible)
+  }
+}
+
+/// Renderer-neutral policy deciding which node labels are emitted independently of node geometry.
+public enum LabelVisibilityPolicy: Sendable, Equatable {
+  /// Hides every label.
+  case none
+  /// Shows labels for the selected node and its direct neighbors.
+  case selectedAndNeighbors
+  /// Shows labels for the highest-valued visible nodes, with stable scene order as the tie-breaker.
+  case top(Int)
+  /// Shows every non-empty label.
+  case all
+}
+
+/// Describes how a scene replacement affects the running layout.
+public enum SceneUpdatePolicy: Sendable, Equatable {
+  /// Preserve the current temperature and scheduling state.
+  case preserve
+  /// Restart scheduling without changing temperature.
+  case restart
+  /// Raise alpha to at least the associated finite value and restart scheduling.
+  case reheat(Double)
+  /// Reheat only when topology, dimensions, or node physics inputs changed.
+  case automatic(alpha: Double)
+}
+
 /// Renderer-neutral link appearance and direction metadata.
 public struct LinkVisual: Sendable, Equatable {
   /// Base edge color.
@@ -71,6 +101,12 @@ public struct LinkVisual: Sendable, Equatable {
     self.width = width.isFinite ? max(0, width) : 0
     self.isVisible = isVisible
     self.isDirectional = isDirectional
+  }
+}
+
+extension LinkVisual {
+  var sanitized: Self {
+    Self(color: color, width: width, isVisible: isVisible, isDirectional: isDirectional)
   }
 }
 
@@ -111,14 +147,21 @@ public struct LayoutPolicy: Sendable, Equatable {
   public var dragAlphaTarget: Double
   /// Alpha target after drag completion.
   public var releaseAlphaTarget: Double
+  /// Label selection policy. Labels remain independent of node visibility in render payloads.
+  public var labelVisibility: LabelVisibilityPolicy
+  /// Default behavior for scene replacements.
+  public var sceneUpdate: SceneUpdatePolicy
   /// Creates a layout policy.
   public init(
     warmupTicks: Int = 30, dragAlphaTarget: Double = 0.3,
-    releaseAlphaTarget: Double = 0
+    releaseAlphaTarget: Double = 0, labelVisibility: LabelVisibilityPolicy = .none,
+    sceneUpdate: SceneUpdatePolicy = .automatic(alpha: 0.3)
   ) {
     self.warmupTicks = max(0, warmupTicks)
     self.dragAlphaTarget = dragAlphaTarget.isFinite ? dragAlphaTarget : 0.3
     self.releaseAlphaTarget = releaseAlphaTarget.isFinite ? releaseAlphaTarget : 0
+    self.labelVisibility = labelVisibility
+    self.sceneUpdate = sceneUpdate
   }
 }
 
@@ -174,7 +217,9 @@ extension ForceGraphScene {
       linkIDs.insert($0.id).inserted && $0.physics.source != $0.physics.target
         && nodeIDs.contains($0.physics.source) && nodeIDs.contains($0.physics.target)
     }
-    return Self(nodes: safeNodes, links: safeLinks, dimensions: dimensions, policy: policy)
+    return Self(
+      nodes: safeNodes, links: safeLinks, dimensions: dimensions, policy: policy,
+      topologyRevision: topologyRevision, visualRevision: visualRevision)
   }
 }
 
@@ -188,15 +233,23 @@ public struct ForceGraphScene<ID: Hashable & Sendable, LinkID: Hashable & Sendab
   public var dimensions: SimulationDimensions
   /// Warmup and drag cooling policy.
   public var policy: LayoutPolicy
+  /// Caller-controlled topology hint. Controllers also advance their emitted render revision when
+  /// node/link membership changes, so correctness does not depend on maintaining this value.
+  public var topologyRevision: UInt64
+  /// Caller-controlled visual revision used to invalidate renderer geometry and materials.
+  public var visualRevision: UInt64
   /// Creates a scene description.
   public init(
     nodes: [SceneNode<ID>], links: [SceneLink<ID, LinkID>] = [],
-    dimensions: SimulationDimensions = .three, policy: LayoutPolicy = LayoutPolicy()
+    dimensions: SimulationDimensions = .three, policy: LayoutPolicy = LayoutPolicy(),
+    topologyRevision: UInt64 = 0, visualRevision: UInt64 = 0
   ) {
     self.nodes = nodes
     self.links = links
     self.dimensions = dimensions
     self.policy = policy
+    self.topologyRevision = topologyRevision
+    self.visualRevision = visualRevision
   }
 
   /// Returns a deterministic filtered copy, retaining original node/link order and only
@@ -208,6 +261,7 @@ public struct ForceGraphScene<ID: Hashable & Sendable, LinkID: Hashable & Sendab
       nodes: retained,
       links: links.filter {
         ids.contains($0.physics.source) && ids.contains($0.physics.target)
-      }, dimensions: dimensions, policy: policy)
+      }, dimensions: dimensions, policy: policy,
+      topologyRevision: topologyRevision, visualRevision: visualRevision)
   }
 }

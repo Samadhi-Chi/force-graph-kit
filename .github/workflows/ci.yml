@@ -13,7 +13,26 @@ jobs:
       - uses: actions/checkout@v5
       - name: Swift version
         run: swift --version
+      - name: Format lint
+        run: >-
+          { printf '%s\0' Package.swift; find Sources Tests Examples Benchmarks -type f -name
+          '*.swift' -not -path '*/.build/*' -not -path '*/.swiftpm/*' -print0; } |
+          xargs -0 swift format lint --strict
+      - name: Documentation links
+        run: python3 Scripts/validate-markdown-links.py --self-test
       - name: Build
         run: swift build -c release
       - name: Test
         run: swift test -c release
+      - name: visionOS SDK details
+        if: runner.os == 'macOS'
+        run: |
+          xcodebuild -version
+          xcodebuild -showsdks
+          xcrun --sdk xrsimulator --show-sdk-version
+      - name: Build visionOS sample without signing
+        if: runner.os == 'macOS'
+        working-directory: Examples/visionOS
+        run: >-
+          xcodebuild -scheme ForceGraphVisionSample -configuration Release -sdk xrsimulator
+          -destination 'generic/platform=visionOS Simulator' CODE_SIGNING_ALLOWED=NO build

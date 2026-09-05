@@ -41,3 +41,17 @@ reference. Radius collision candidates and public radius queries share the spati
 `ForceGraphScene` owns visual descriptors and interaction state but not UI objects. Its controller
 produces one immutable frame containing node/label state and both endpoints of every edge, ensuring
 all geometry derives from the same simulation revision.
+
+## v0.2 scene and adapter baseline
+
+Scene frames carry monotonic sequence plus topology and visual revisions. The controller caches identity, visibility, and adjacency data across topology-stable ticks. `GraphCoordinateSpace` is the reversible renderer boundary and delegates uniform volume fitting to Core. `ForceGraphSceneScheduler` owns one newest-frame loop and stops that tick loop, but not its stream, when cooling stops.
+
+The RealityKit adapter retains stable roots, uses shared unit sphere/cylinder/cone meshes, changes transforms and scale per frame, and updates materials only when visual/highlight state changes. Reverse lookup is an in-memory typed identity map; entity names are diagnostic only. Pools are bounded.
+
+## Scheduler wake and producer sessions
+
+Cooling makes the Scene scheduler dormant: its task ends but its newest-frame stream remains installed. Drag/update hosts call `restart` or the scheduler's `updateScene`; both wake that same stream and the active-task guard prevents duplicate loops. Pause is likewise dormant. `stop`, consumer termination, or replacement by `start` finishes or tears down the subscription. Hosts must stop the scheduler or cancel consumption when the owning view/task ends so a dormant subscription is not retained indefinitely. RealityKit sequence ordering is scoped to an explicit producer session, reset with `beginSession()` when switching controllers.
+
+Every scheduler operation that crosses into the controller revalidates its loop and consumer
+generation after returning to the actor. A paused, stopped, or replaced generation therefore cannot
+publish into a newer continuation or clear the newer loop's task state.
