@@ -89,7 +89,7 @@
     let old = await controller.frame()
     synchronizer.synchronize(frame: old)
     await controller.beginDrag(id: "node", x: 8)
-    let latest = await controller.frame()
+    let latest = await controller.tick()
     synchronizer.synchronize(frame: latest)
     guard let entity = synchronizer.entity(forNode: "node") else {
       Issue.record("missing node entity")

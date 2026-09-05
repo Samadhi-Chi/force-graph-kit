@@ -337,7 +337,7 @@ import Testing
   #expect(await iterator.next() == nil)
 }
 
-@Test func runnerRepeatedLifecycleHasOnlyOneActiveGeneration() async {
+@Test(.timeLimit(.minutes(1))) func runnerRepeatedLifecycleHasOnlyOneActiveGeneration() async {
   let runner = SimulationRunner(
     simulation: ForceSimulation(nodes: [ForceNode(id: 0)], dimensions: .one),
     framesPerSecond: .nan, ticksPerFrame: -4
@@ -354,8 +354,13 @@ import Testing
   #expect(await runner.currentFrame().sequence == paused)
   await runner.configure(framesPerSecond: 500, ticksPerFrame: 5_000)
   await runner.resume()
-  try? await Task.sleep(for: .milliseconds(10))
-  #expect(await runner.currentFrame().sequence > paused)
+  var resumed: SimulationFrame<Int>?
+  while let frame = await secondIterator.next() {
+    guard frame.sequence > paused else { continue }
+    resumed = frame
+    break
+  }
+  #expect(resumed?.sequence ?? 0 > paused)
   await runner.stop()
   await runner.stop()
   if await secondIterator.next() != nil { #expect(await secondIterator.next() == nil) }
