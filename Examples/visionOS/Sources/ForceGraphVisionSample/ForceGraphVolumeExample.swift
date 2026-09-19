@@ -10,7 +10,9 @@
   @MainActor
   struct ForceGraphVolumeExample: View {
     let controller: ForceGraphController<String, String>
-    @State private var synchronizer = RealityKitGraphSynchronizer<String, String>()
+    // Default layout forces operate in graph units; render one unit as one centimetre.
+    @State private var synchronizer = RealityKitGraphSynchronizer<String, String>(
+      coordinateSpace: GraphCoordinateSpace(axes: .xy, scale: 0.01))
     let scheduler: ForceGraphSceneScheduler<String, String>
 
     var body: some View {

@@ -8,6 +8,11 @@ data and the volumetric app entry point. `HostInteractionCallbacks.swift` retain
 forwarding hooks without claiming unverified targeted-gesture APIs. Those callbacks wake the scene
 scheduler after selection or drag changes so a cooled layout publishes the resulting frame.
 
+The sample maps one graph unit to one centimetre in RealityKit. Its initial positions,
+node radii, and edge widths are all expressed in graph units, matching the controller's
+default force distances. Rendering those distances directly as metres moves the nodes
+outside the volumetric window after the simulation starts.
+
 Manifest-only validation from the repository root:
 
 ```sh

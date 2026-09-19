@@ -14,12 +14,16 @@
       let scene = ForceGraphScene(
         nodes: [
           SceneNode(
-            physics: ForceNode(id: "a", x: -0.2, y: 0), visual: NodeVisual(label: "A", radius: 0.03)
+            physics: ForceNode(id: "a", x: -20, y: 0), visual: NodeVisual(label: "A", radius: 3)
           ),
           SceneNode(
-            physics: ForceNode(id: "b", x: 0.2, y: 0), visual: NodeVisual(label: "B", radius: 0.03)),
+            physics: ForceNode(id: "b", x: 20, y: 0), visual: NodeVisual(label: "B", radius: 3)),
         ],
-        links: [SceneLink(id: "ab", physics: ForceLink(source: "a", target: "b"))],
+        links: [
+          SceneLink(
+            id: "ab", physics: ForceLink(source: "a", target: "b"),
+            visual: LinkVisual(width: 0.4))
+        ],
         dimensions: .two, policy: LayoutPolicy(warmupTicks: 0), topologyRevision: 1)
       let controller = ForceGraphController(scene: scene)
       self.controller = controller
